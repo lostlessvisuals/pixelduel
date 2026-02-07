@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State, Manager, Emitter};
 use uuid::Uuid;
 
 #[derive(Default)]
@@ -64,7 +64,7 @@ struct ExportStarted {
   output_path: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct ExportProgress {
   export_id: String,
   progress: String,
@@ -415,7 +415,9 @@ fn export_video(
   }
 
   let app_handle = app.clone();
-  let children = export_manager.children.clone();
+  
+  let export_id_for_thread = export_id.clone();
+let children = export_manager.children.clone();
   thread::spawn(move || {
     let reader = BufReader::new(stdout);
     let mut out_time_ms: Option<u64> = None;
@@ -427,17 +429,17 @@ fn export_video(
         }
         if key == "progress" {
           let payload = ExportProgress {
-            export_id: export_id.clone(),
+            export_id: export_id_for_thread.clone(),
             progress: value.to_string(),
             out_time_ms,
           };
-          let _ = app_handle.emit_all("export-progress", payload);
+          let _ = app_handle.emit("export-progress", payload);
         }
       }
     }
 
     if let Ok(mut map) = children.lock() {
-      if let Some(mut child) = map.remove(&export_id) {
+      if let Some(mut child) = map.remove(&export_id_for_thread) {
         let _ = child.wait();
       }
     }
@@ -470,3 +472,4 @@ pub fn run() {
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
+

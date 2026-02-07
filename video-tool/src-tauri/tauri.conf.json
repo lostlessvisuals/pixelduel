@@ -4,9 +4,7 @@
     "version":  "0.1.0",
     "identifier":  "video-tool",
     "build":  {
-                  "devUrl":  "http://127.0.0.1:1420",
-                  "frontendDist":  "../src",
-                  "beforeBuildCommand":  "powershell -ExecutionPolicy Bypass -File ../scripts/prebuild.ps1"
+                  "frontendDist":  "../src"
               },
     "app":  {
                 "withGlobalTauri":  true,
