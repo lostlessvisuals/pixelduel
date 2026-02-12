@@ -1,6 +1,6 @@
 # PixelDuel
 
-PixelDuel is a Windows-focused Tauri app for inspecting, comparing, and exporting video files via bundled ffmpeg.
+PixelDuel is an open source Windows-focused Tauri app for inspecting, comparing, and exporting video files via bundled ffmpeg.
 
 ## Features
 
