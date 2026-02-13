@@ -1,5 +1,9 @@
 # PixelDuel
 
+## Downloads
+- Download the latest installer/exe from **GitHub Releases** (Assets).
+- The **Download ZIP** button is source-only and will not include large binaries (Git LFS pointers).
+
 PixelDuel is an open source Windows-focused Tauri app for inspecting, comparing, and exporting video files via bundled ffmpeg.
 
 ## Features
@@ -51,3 +55,10 @@ cargo tauri build
 ```
 
 The release bundle uses `src-tauri/binaries/ffmpeg.exe` and `src-tauri/binaries/ffprobe.exe` from the app resources. A pre-build script checks for these binaries before bundling. After a successful build, run the generated `.exe` from `src-tauri/target/release/bundle/`.
+
+## Releasing
+1. Bump version in `src-tauri/tauri.conf.json` (and `package.json` if you track it).
+2. Tag and push:
+   - `git tag vX.Y.Z`
+   - `git push origin vX.Y.Z`
+This triggers the GitHub Actions release workflow and uploads the Windows installers to the Release assets.
