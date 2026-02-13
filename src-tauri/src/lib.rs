@@ -88,11 +88,61 @@ struct ExportParams {
     fps: Option<f64>,
     trim_start_frame: Option<u64>,
     trim_end_frame: Option<u64>,
+    label_a: Option<String>,
+    label_b: Option<String>,
     audio_copy: bool,
     stack_height: Option<u32>,
 }
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn resolve_font_file() -> Option<String> {
+    let candidates = [
+        "C:\\Windows\\Fonts\\segoeui.ttf",
+        "C:\\Windows\\Fonts\\SegoeUI.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "C:\\Windows\\Fonts\\Arial.ttf",
+    ];
+    for path in candidates {
+        if Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+    None
+}
+
+fn escape_filter_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace(':', "\\:")
+        .replace('%', "\\%")
+}
+
+fn escape_drawtext(value: &str) -> String {
+    escape_filter_value(value).replace('\'', "\\'")
+}
+
+fn label_filters(label: &str) -> Vec<String> {
+    let trimmed = label.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    let fontfile = resolve_font_file().map(escape_filter_value);
+    let text = escape_drawtext(trimmed);
+    let mut drawtext = String::new();
+    if let Some(fontfile) = fontfile {
+        drawtext.push_str(&format!("fontfile={fontfile}:"));
+    }
+    drawtext.push_str(&format!(
+        "text='{text}':fontcolor=white:fontsize=h*0.055:x=(w-text_w)/2:y=h-(text_h*1.6)"
+    ));
+
+    vec![
+        "drawbox=x=0:y=ih*0.86:w=iw:h=ih*0.14:color=black@0.45:t=fill".to_string(),
+        format!("drawtext={drawtext}"),
+    ]
+}
 
 fn resolve_bundled_binary(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     let dev_path = PathBuf::from("binaries").join(name);
@@ -418,6 +468,13 @@ fn export_video(
             right_filters.push(format!("scale=-2:{height}:flags=lanczos"));
         }
 
+        if let Some(label) = params.label_a.as_deref() {
+            left_filters.extend(label_filters(label));
+        }
+        if let Some(label) = params.label_b.as_deref() {
+            right_filters.extend(label_filters(label));
+        }
+
         let mut complex_filter = String::new();
         if !left_filters.is_empty() {
             complex_filter.push_str(&format!("[0:v]{}[left];", left_filters.join(",")));
@@ -438,9 +495,19 @@ fn export_video(
             args.push("-map".to_string());
             args.push("0:a?".to_string());
         }
-    } else if !filters.is_empty() {
-        args.push("-vf".to_string());
-        args.push(filters.join(","));
+    } else {
+        let label = if export_mode == "input-b" {
+            params.label_b.as_deref()
+        } else {
+            params.label_a.as_deref()
+        };
+        if let Some(label) = label {
+            filters.extend(label_filters(label));
+        }
+        if !filters.is_empty() {
+            args.push("-vf".to_string());
+            args.push(filters.join(","));
+        }
     }
 
     if uses_select {

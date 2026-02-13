@@ -28,6 +28,8 @@ const elements = {
   fps: document.querySelector('[data-field="fps"]'),
   trimStartFrame: document.querySelector('[data-field="trim-start-frame"]'),
   trimEndFrame: document.querySelector('[data-field="trim-end-frame"]'),
+  labelA: document.querySelector('[data-field="label-a"]'),
+  labelB: document.querySelector('[data-field="label-b"]'),
   audioCopy: document.querySelector('[data-field="audio-copy"]'),
   progress: document.querySelector('progress'),
   progressText: document.querySelector('[data-field="progress-text"]'),
@@ -441,6 +443,8 @@ async function startExport() {
     fps: isSideBySide ? null : numberValue(elements.fps),
     trimStartFrame: isSideBySide ? null : numberValue(elements.trimStartFrame),
     trimEndFrame: isSideBySide ? null : numberValue(elements.trimEndFrame),
+    labelA: elements.labelA.value.trim(),
+    labelB: elements.labelB.value.trim(),
     audioCopy: elements.audioCopy.checked,
     stackHeight,
   };
