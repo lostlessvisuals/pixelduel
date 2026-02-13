@@ -44,4 +44,3 @@ jobs:
           releaseName: PixelDuel ${{ github.ref_name }}
           releaseDraft: false
           prerelease: false
-          args: --release
