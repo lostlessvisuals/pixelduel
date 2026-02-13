@@ -413,8 +413,9 @@ fn export_video(
         }
 
         if let Some(height) = params.stack_height {
-            left_filters.push(format!("scale=-1:{height}"));
-            right_filters.push(format!("scale=-1:{height}"));
+            // Use -2 to force even width for encoders like libx264.
+            left_filters.push(format!("scale=-2:{height}:flags=lanczos"));
+            right_filters.push(format!("scale=-2:{height}:flags=lanczos"));
         }
 
         let mut complex_filter = String::new();
@@ -541,17 +542,16 @@ fn export_video(
                 let status = child.wait();
                 if let Ok(status) = status {
                     if !status.success() {
-                        let message = stderr_buffer
-                            .lock()
-                            .ok()
-                            .and_then(|data| {
-                                let trimmed = data.trim();
-                                if trimmed.is_empty() {
-                                    None
-                                } else {
-                                    Some(trimmed.lines().take(6).collect::<Vec<_>>().join("\n"))
-                                }
-                            });
+                        let message = stderr_buffer.lock().ok().and_then(|data| {
+                            let trimmed = data.trim();
+                            if trimmed.is_empty() {
+                                None
+                            } else {
+                                let lines: Vec<&str> = trimmed.lines().collect();
+                                let start = lines.len().saturating_sub(8);
+                                Some(lines[start..].join("\n"))
+                            }
+                        });
                         let payload = ExportProgress {
                             export_id: export_id_for_thread.clone(),
                             progress: "error".to_string(),
