@@ -1,23 +1,25 @@
 :root {
   color-scheme: dark;
   font-family: "Aptos", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 16px;
-  --bg: #07040a;
-  --panel: rgba(21, 13, 24, 0.78);
-  --panel-strong: rgba(31, 20, 34, 0.92);
+  --bg: #090b0d;
+  --panel: rgba(14, 16, 18, 0.96);
+  --panel-strong: rgba(20, 23, 26, 0.98);
   --panel-soft: rgba(255, 255, 255, 0.04);
-  --border: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(255, 255, 255, 0.18);
-  --text: #f8f3f0;
-  --muted: #c7b7bd;
-  --subtle: #8e7d86;
-  --accent: #f97316;
-  --accent-strong: #fb7185;
-  --accent-soft: #fbbf24;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #f3f4f6;
+  --muted: #c7cfd7;
+  --subtle: #8f99a3;
+  --accent: #ff6b3d;
+  --accent-strong: #ff5147;
+  --accent-soft: #f1c662;
+  --accent-dim: rgba(255, 107, 61, 0.6);
   --success: #34d399;
   --info: #7dd3fc;
   --error: #fda4af;
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.34);
+  --shadow: 0 20px 42px rgba(0, 0, 0, 0.28);
 }
 
 * {
@@ -33,9 +35,8 @@ body {
   margin: 0;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(251, 113, 133, 0.2), transparent 28%),
-    radial-gradient(circle at top right, rgba(251, 191, 36, 0.16), transparent 22%),
-    linear-gradient(180deg, #110811 0%, #09070c 52%, #040306 100%);
+    radial-gradient(circle at top right, rgba(255, 107, 61, 0.07), transparent 18%),
+    linear-gradient(180deg, #111417 0%, #090b0d 100%);
 }
 
 body::before {
@@ -44,11 +45,12 @@ body::before {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 24px 24px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.36), transparent 85%);
-  opacity: 0.26;
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 28px 28px, 28px 28px, 100% 4px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.44), transparent 90%);
+  opacity: 0.18;
 }
 
 .app {
@@ -67,9 +69,9 @@ body::before {
   overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: 16px;
   box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
 }
 
 .panel-surface::before {
@@ -77,7 +79,20 @@ body::before {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 28%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 20%);
+}
+
+.panel-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--accent-dim), var(--accent-dim)) top left / 16px 1px no-repeat,
+    linear-gradient(180deg, var(--accent-dim), var(--accent-dim)) top left / 1px 16px no-repeat,
+    linear-gradient(90deg, var(--accent-dim), var(--accent-dim)) bottom right / 16px 1px no-repeat,
+    linear-gradient(180deg, var(--accent-dim), var(--accent-dim)) bottom right / 1px 16px no-repeat;
+  opacity: 0.82;
 }
 
 .hero,
@@ -92,6 +107,24 @@ body::before {
   grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
   gap: 24px;
   align-items: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, rgba(255, 107, 61, 0.03), rgba(255, 255, 255, 0) 30%);
+}
+
+.hero-copy {
+  position: relative;
+  padding-left: 18px;
+}
+
+.hero-copy::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: linear-gradient(180deg, var(--accent-dim), rgba(255, 107, 61, 0.08));
 }
 
 .eyebrow,
@@ -103,18 +136,17 @@ body::before {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent-soft);
+  font-family: var(--mono);
 }
 
 .pixel-title {
   margin: 0;
-  font-family: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--mono);
   font-size: clamp(2.2rem, 5vw, 4.1rem);
-  line-height: 0.94;
-  letter-spacing: 0.06em;
-  text-shadow:
-    0 0 22px rgba(249, 115, 22, 0.34),
-    3px 0 0 rgba(251, 113, 133, 0.78),
-    -3px 0 0 rgba(0, 0, 0, 0.88);
+  line-height: 1;
+  letter-spacing: 0.045em;
+  color: #fff7ed;
+  text-shadow: 0 1px 0 rgba(255, 107, 61, 0.4);
 }
 
 .hero-summary,
@@ -138,9 +170,9 @@ body::before {
   grid-template-columns: auto 1fr;
   gap: 12px;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.015);
   transition:
     transform 180ms ease,
     border-color 180ms ease,
@@ -149,26 +181,29 @@ body::before {
 }
 
 .workflow-step[data-state="active"] {
-  border-color: rgba(251, 191, 36, 0.42);
-  background: rgba(251, 191, 36, 0.09);
+  border-color: rgba(249, 115, 22, 0.36);
+  background: rgba(255, 107, 61, 0.06);
 }
 
 .workflow-step[data-state="ready"] {
-  border-color: rgba(52, 211, 153, 0.34);
-  background: rgba(52, 211, 153, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.16);
+  border-color: rgba(255, 107, 61, 0.5);
+  background: rgba(255, 107, 61, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 61, 0.18);
 }
 
 .workflow-step-index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   font-weight: 700;
+  font-family: var(--mono);
+  font-size: 0.86rem;
 }
 
 .workflow-step strong,
@@ -197,9 +232,9 @@ body::before {
 .summary-card {
   min-width: min(340px, 100%);
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 255, 255, 0.015);
   color: var(--muted);
   line-height: 1.45;
 }
@@ -230,7 +265,7 @@ body::before {
 .compare-grid {
   position: relative;
   z-index: 1;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--panel-strong);
 }
@@ -288,15 +323,18 @@ body::before {
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  min-height: 32px;
-  padding: 7px 12px;
-  border-radius: 999px;
+  min-height: 28px;
+  padding: 6px 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(255, 255, 255, 0.025);
   color: var(--text);
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   line-height: 1;
   white-space: nowrap;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .meta-chip,
@@ -359,17 +397,75 @@ body::before {
 .field span {
   color: var(--muted);
   font-size: 0.82rem;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: var(--mono);
 }
 
 .field.checkbox {
   flex-direction: row;
   align-items: center;
   gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .field.checkbox span {
   font-size: 0.92rem;
+  line-height: 1.35;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  font-family: inherit;
+}
+
+.field.checkbox input[type="checkbox"] {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  appearance: none;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(6, 8, 10, 0.7);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
+}
+
+.field.checkbox input[type="checkbox"]::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid #111417;
+  border-bottom: 2px solid #111417;
+  transform: rotate(45deg) scale(0);
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+
+.field.checkbox input[type="checkbox"]:checked {
+  border-color: rgba(251, 191, 36, 0.82);
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent));
+}
+
+.field.checkbox input[type="checkbox"]:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.field.checkbox input[type="checkbox"]:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(125, 211, 252, 0.16),
+    0 0 0 1px rgba(125, 211, 252, 0.28) inset;
 }
 
 .row {
@@ -388,11 +484,11 @@ progress {
 input,
 select {
   width: 100%;
-  min-height: 46px;
-  padding: 11px 13px;
-  border-radius: 14px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: rgba(8, 8, 12, 0.68);
+  background: rgba(8, 10, 12, 0.88);
   color: var(--text);
   outline: none;
   transition:
@@ -402,7 +498,7 @@ select {
 }
 
 input::placeholder {
-  color: #8f7a84;
+  color: #8b949e;
 }
 
 input:focus-visible,
@@ -423,16 +519,19 @@ select:disabled {
 }
 
 button {
-  min-height: 42px;
-  padding: 10px 16px;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  color: #fff7f3;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  box-shadow: 0 10px 18px rgba(249, 115, 22, 0.18);
+  min-height: 40px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 107, 61, 0.38);
+  color: #fff3ec;
+  background: linear-gradient(180deg, rgba(255, 107, 61, 0.2), rgba(255, 107, 61, 0.1));
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 61, 0.1);
   cursor: pointer;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  font-size: 0.8rem;
   transition:
     transform 120ms ease,
     box-shadow 160ms ease,
@@ -442,8 +541,10 @@ button {
 
 button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 14px 24px rgba(249, 115, 22, 0.24);
-  filter: saturate(1.06);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 107, 61, 0.22),
+    0 8px 18px rgba(0, 0, 0, 0.24);
+  filter: none;
 }
 
 button:active:not(:disabled) {
@@ -458,7 +559,7 @@ button:disabled {
 
 .button-secondary,
 .button-ghost {
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.015);
   border-color: var(--border);
   color: var(--text);
   box-shadow: none;
@@ -500,12 +601,11 @@ button:disabled {
   width: 100%;
   height: clamp(260px, 52vh, 660px);
   margin-top: 12px;
-  border-radius: 18px;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
   background:
-    radial-gradient(circle at top, rgba(251, 113, 133, 0.14), transparent 24%),
-    linear-gradient(180deg, rgba(19, 14, 22, 0.98), rgba(7, 6, 9, 0.98));
+    linear-gradient(180deg, rgba(18, 20, 22, 1), rgba(7, 8, 10, 1));
 }
 
 .preview-frame::after {
@@ -562,8 +662,9 @@ button:disabled {
   border-top: none;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  font-size: 0.74rem;
+  font-family: var(--mono);
 }
 
 .compare-grid td:first-child {
@@ -604,6 +705,20 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
+}
+
+.export-label-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.export-label-row .field span {
+  min-height: 2.5em;
+  display: flex;
+  align-items: flex-end;
 }
 
 .export-top {
@@ -699,7 +814,9 @@ progress::-moz-progress-bar {
   padding: 4px 8px 10px;
   color: var(--subtle);
   text-decoration: none;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--mono);
   transition: color 160ms ease, opacity 160ms ease;
 }
 
@@ -751,12 +868,20 @@ progress::-moz-progress-bar {
   .compare,
   .export {
     padding: 18px;
-    border-radius: 20px;
+    border-radius: 14px;
   }
 
   .row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .export-label-row {
+    grid-template-columns: 1fr;
+  }
+
+  .export-label-row .field span {
+    min-height: 0;
   }
 
   .preview-controls,
