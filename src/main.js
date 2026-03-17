@@ -1,16 +1,30 @@
-﻿const tauri = window.__TAURI__;
+const tauri = window.__TAURI__;
 
 const state = {
   infoA: null,
   infoB: null,
   exportId: null,
   exportOutput: null,
+  isExporting: false,
 };
 
 const elements = {
+  app: document.querySelector('.app'),
+  inputPanelA: document.querySelector('#input-a'),
+  inputPanelB: document.querySelector('#input-b'),
+  badgeA: document.querySelector('[data-field="badge-a"]'),
+  badgeB: document.querySelector('[data-field="badge-b"]'),
+  summaryA: document.querySelector('[data-field="summary-a"]'),
+  summaryB: document.querySelector('[data-field="summary-b"]'),
+  metaA: document.querySelector('[data-field="meta-a"]'),
+  metaB: document.querySelector('[data-field="meta-b"]'),
+  stageLoad: document.querySelector('[data-field="stage-load"]'),
+  stageCompare: document.querySelector('[data-field="stage-compare"]'),
+  stageExport: document.querySelector('[data-field="stage-export"]'),
   pathA: document.querySelector('[data-field="path-a"]'),
   pathB: document.querySelector('[data-field="path-b"]'),
   compareGrid: document.querySelector('#compare-grid'),
+  compareSummary: document.querySelector('[data-field="compare-summary"]'),
   previewA: document.querySelector('[data-field="preview-a"]'),
   previewB: document.querySelector('[data-field="preview-b"]'),
   previewFrameA: document.querySelector('[data-field="preview-frame-a"]'),
@@ -19,6 +33,7 @@ const elements = {
   filenameB: document.querySelector('[data-field="filename-b"]'),
   outputPath: document.querySelector('[data-field="output-path"]'),
   exportMode: document.querySelector('[data-field="export-mode"]'),
+  exportSummary: document.querySelector('[data-field="export-summary"]'),
   container: document.querySelector('[data-field="container"]'),
   codec: document.querySelector('[data-field="codec"]'),
   crf: document.querySelector('[data-field="crf"]'),
@@ -31,16 +46,29 @@ const elements = {
   labelA: document.querySelector('[data-field="label-a"]'),
   labelB: document.querySelector('[data-field="label-b"]'),
   audioCopy: document.querySelector('[data-field="audio-copy"]'),
+  progressShell: document.querySelector('[data-field="progress-shell"]'),
   progress: document.querySelector('progress'),
   progressText: document.querySelector('[data-field="progress-text"]'),
   status: document.querySelector('[data-field="status"]'),
+  playButton: document.querySelector('[data-action="play-both"]'),
+  pauseButton: document.querySelector('[data-action="pause-both"]'),
+  resetButton: document.querySelector('[data-action="reset-both"]'),
+  exportButton: document.querySelector('[data-action="export"]'),
   cancelButton: document.querySelector('[data-action="cancel"]'),
   openOutputButton: document.querySelector('[data-action="open-output"]'),
 };
 
-function setStatus(message, isError = true) {
-  elements.status.textContent = message;
-  elements.status.style.color = isError ? '#f87171' : '#38bdf8';
+function setStatus(message, tone = 'error') {
+  elements.status.textContent = message || '';
+  elements.status.dataset.tone = tone;
+}
+
+function setProgressState(mode) {
+  elements.progressShell.dataset.state = mode;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
 function toVideoSrc(path) {
@@ -57,46 +85,45 @@ function fileNameFromPath(path) {
   return parts[parts.length - 1] || path;
 }
 
-function updateFileNames() {
-  const nameA = fileNameFromPath(elements.pathA.value);
-  const nameB = fileNameFromPath(elements.pathB.value);
-  if (elements.filenameA) {
-    elements.filenameA.textContent = nameA || 'Input A';
-  }
-  if (elements.filenameB) {
-    elements.filenameB.textContent = nameB || 'Input B';
-  }
-  if (nameA && nameB && nameA === nameB) {
-    if (elements.filenameA) elements.filenameA.textContent = `${nameA} (1)`;
-    if (elements.filenameB) elements.filenameB.textContent = `${nameB} (2)`;
+function setPreviewSourceState(target, hasSource) {
+  const frame = target === 'a' ? elements.previewFrameA : elements.previewFrameB;
+  if (frame) {
+    frame.dataset.hasSource = hasSource ? 'true' : 'false';
   }
 }
 
-function loadPreviews() {
-  if (elements.pathA.value) {
-    elements.previewA.src = toVideoSrc(elements.pathA.value);
-    elements.previewA.dataset.sourcePath = elements.pathA.value;
-    updateFileNames();
-    elements.previewA.load();
-    probe('a');
+function updateFileNames() {
+  const nameA = fileNameFromPath(elements.pathA.value);
+  const nameB = fileNameFromPath(elements.pathB.value);
+
+  let displayA = nameA || 'Input A';
+  let displayB = nameB || 'Input B';
+  if (nameA && nameB && nameA === nameB) {
+    displayA = `${nameA} (1)`;
+    displayB = `${nameB} (2)`;
   }
-  if (elements.pathB.value) {
-    elements.previewB.src = toVideoSrc(elements.pathB.value);
-    elements.previewB.dataset.sourcePath = elements.pathB.value;
-    updateFileNames();
-    elements.previewB.load();
-    probe('b');
-  }
+
+  elements.filenameA.textContent = displayA;
+  elements.filenameB.textContent = displayB;
+  elements.filenameA.title = displayA;
+  elements.filenameB.title = displayB;
 }
 
 function mediaElements() {
   return [elements.previewA, elements.previewB].filter((video) => video?.src);
 }
 
+function syncTransportControls() {
+  const hasMedia = mediaElements().length > 0;
+  elements.playButton.disabled = !hasMedia;
+  elements.pauseButton.disabled = !hasMedia;
+  elements.resetButton.disabled = !hasMedia;
+}
+
 async function playBoth() {
   const videos = mediaElements();
   if (videos.length === 0) {
-    setStatus('Load previews first.');
+    setStatus('Load previews first.', 'warn');
     return;
   }
   const targetTime = Math.min(...videos.map((video) => video.currentTime || 0));
@@ -158,25 +185,89 @@ function formatBytes(value) {
   return `${size.toFixed(2)} ${units[unitIndex]}`;
 }
 
-function setPreviewAspect(target, info) {
-  if (target === 'a' && elements.previewFrameA) {
-    elements.previewFrameA.dataset.hasInfo = info ? 'true' : 'false';
-  }
-  if (target === 'b' && elements.previewFrameB) {
-    elements.previewFrameB.dataset.hasInfo = info ? 'true' : 'false';
-  }
+function formatMode(mode) {
+  if (mode === 'input-a') return 'Input A only';
+  if (mode === 'input-b') return 'Input B only';
+  return 'Side by side';
 }
 
-function renderCompare() {
-  if (!state.infoA && !state.infoB) {
-    elements.compareGrid.innerHTML = '<div class="placeholder">Load Input A and B to compare.</div>';
+function renderChips(container, chips) {
+  container.innerHTML = chips
+    .map((chip) => `<span class="meta-chip${chip.muted ? ' muted' : ''}">${escapeHtml(chip.label)}</span>`)
+    .join('');
+}
+
+function setSummary(element, text, chips = []) {
+  const chipMarkup = chips
+    .map((chip) => `<span class="summary-pill ${escapeHtml(chip.tone || 'idle')}">${escapeHtml(chip.label)}</span>`)
+    .join('');
+  element.innerHTML = `${escapeHtml(text)}${chipMarkup ? `<div class="meta-chips">${chipMarkup}</div>` : ''}`;
+}
+
+function inputInfo(target) {
+  return target === 'a' ? state.infoA : state.infoB;
+}
+
+function inputElements(target) {
+  return target === 'a'
+    ? { panel: elements.inputPanelA, badge: elements.badgeA, summary: elements.summaryA, meta: elements.metaA, path: elements.pathA }
+    : { panel: elements.inputPanelB, badge: elements.badgeB, summary: elements.summaryB, meta: elements.metaB, path: elements.pathB };
+}
+
+function renderInputState(target) {
+  const info = inputInfo(target);
+  const { panel, badge, summary, meta, path } = inputElements(target);
+  const value = path.value.trim();
+
+  if (!value) {
+    panel.dataset.state = 'idle';
+    badge.dataset.tone = 'idle';
+    badge.textContent = 'Empty';
+    summary.textContent =
+      target === 'a' ? 'Drop a video here to start building your comparison.' : 'Load the second clip when you are ready to compare output.';
+    renderChips(meta, [{ label: 'Waiting for video', muted: true }]);
+    setPreviewSourceState(target, false);
     return;
   }
 
+  if (!info) {
+    panel.dataset.state = 'loading';
+    badge.dataset.tone = 'loading';
+    badge.textContent = 'Loading';
+    summary.textContent = `${fileNameFromPath(value)} is selected. Reading metadata now.`;
+    renderChips(meta, [{ label: 'Reading metadata...' }, { label: 'Preview ready', muted: true }]);
+    setPreviewSourceState(target, true);
+    return;
+  }
+
+  panel.dataset.state = 'ready';
+  badge.dataset.tone = 'ready';
+  badge.textContent = 'Ready';
+  summary.textContent = `${fileNameFromPath(value)} is ready for preview, compare, and export defaults.`;
+
+  const chips = [
+    { label: formatResolution(info.video) },
+    { label: formatDuration(info.container?.duration_sec) },
+    { label: formatMaybe(info.video?.codec_name, 'No video codec') },
+  ];
+  if (info.video?.fps) chips.push({ label: `${info.video.fps.toFixed(3)} fps` });
+  if (info.audio?.codec_name) chips.push({ label: `Audio ${info.audio.codec_name}` });
+  chips.push({ label: formatBytes(info.size_bytes) });
+  renderChips(meta, chips);
+  setPreviewSourceState(target, true);
+}
+
+function setPreviewAspect(target, info) {
+  const frame = target === 'a' ? elements.previewFrameA : elements.previewFrameB;
+  if (frame) {
+    frame.dataset.hasInfo = info ? 'true' : 'false';
+  }
+}
+
+function collectComparisonRows() {
   const infoA = state.infoA;
   const infoB = state.infoB;
-
-  const rows = [
+  return [
     ['File', fileNameFromPath(infoA?.file), fileNameFromPath(infoB?.file)],
     ['Size', formatBytes(infoA?.size_bytes), formatBytes(infoB?.size_bytes)],
     ['Container', formatMaybe(infoA?.container?.format_name), formatMaybe(infoB?.container?.format_name)],
@@ -187,21 +278,37 @@ function renderCompare() {
     ['Resolution', formatResolution(infoA?.video), formatResolution(infoB?.video)],
     ['Pixel Format', formatMaybe(infoA?.video?.pix_fmt), formatMaybe(infoB?.video?.pix_fmt)],
     ['Color Space', formatMaybe(infoA?.video?.color_space), formatMaybe(infoB?.video?.color_space)],
-    [
-      'Frame Rate',
-      infoA?.video?.fps ? `${infoA.video.fps.toFixed(3)} fps` : '-',
-      infoB?.video?.fps ? `${infoB.video.fps.toFixed(3)} fps` : '-',
-    ],
+    ['Frame Rate', infoA?.video?.fps ? `${infoA.video.fps.toFixed(3)} fps` : '-', infoB?.video?.fps ? `${infoB.video.fps.toFixed(3)} fps` : '-'],
     ['Frame Count', formatMaybe(infoA?.video?.frame_count), formatMaybe(infoB?.video?.frame_count)],
     ['Audio Codec', formatMaybe(infoA?.audio?.codec_name), formatMaybe(infoB?.audio?.codec_name)],
     ['Channels', formatMaybe(infoA?.audio?.channels), formatMaybe(infoB?.audio?.channels)],
-    [
-      'Sample Rate',
-      infoA?.audio?.sample_rate ? `${infoA.audio.sample_rate} Hz` : '-',
-      infoB?.audio?.sample_rate ? `${infoB.audio.sample_rate} Hz` : '-',
-    ],
+    ['Sample Rate', infoA?.audio?.sample_rate ? `${infoA.audio.sample_rate} Hz` : '-', infoB?.audio?.sample_rate ? `${infoB.audio.sample_rate} Hz` : '-'],
     ['Audio Bitrate', formatBitrate(infoA?.audio?.bit_rate), formatBitrate(infoB?.audio?.bit_rate)],
   ];
+}
+
+function renderCompare() {
+  if (!state.infoA && !state.infoB) {
+    setSummary(elements.compareSummary, 'Load both inputs to unlock a confident side-by-side review.', [{ label: 'Waiting for files', tone: 'idle' }]);
+    elements.compareGrid.innerHTML = '<div class="placeholder">Load Input A and B to compare.</div>';
+    return;
+  }
+
+  const rows = collectComparisonRows();
+
+  if (!state.infoA || !state.infoB) {
+    const readySide = state.infoA ? 'Input A is ready.' : 'Input B is ready.';
+    const missingSide = state.infoA ? 'Add Input B to complete the comparison.' : 'Add Input A to complete the comparison.';
+    setSummary(elements.compareSummary, `${readySide} ${missingSide}`, [{ label: 'One clip missing', tone: 'warn' }]);
+  } else {
+    const comparableRows = rows.filter(([, a, b]) => a !== '-' && b !== '-');
+    const diffCount = comparableRows.filter(([, a, b]) => String(a ?? '') !== String(b ?? '')).length;
+    const sameCount = comparableRows.length - diffCount;
+    setSummary(elements.compareSummary, 'Both clips are loaded. Playback and metadata are ready for a clean side-by-side check.', [
+      { label: `${diffCount} differences`, tone: diffCount > 0 ? 'warn' : 'ready' },
+      { label: `${sameCount} matches`, tone: 'ready' },
+    ]);
+  }
 
   elements.compareGrid.innerHTML = `
     <table>
@@ -221,9 +328,9 @@ function renderCompare() {
             const same = String(a ?? '') === String(b ?? '');
             return `
               <tr>
-                <td>${label}</td>
-                <td class="${same ? 'same' : 'diff'}">${a ?? '-'}</td>
-                <td class="${same ? 'same' : 'diff'}">${b ?? '-'}</td>
+                <td>${escapeHtml(label)}</td>
+                <td class="${same ? 'same' : 'diff'}">${escapeHtml(a ?? '-')}</td>
+                <td class="${same ? 'same' : 'diff'}">${escapeHtml(b ?? '-')}</td>
               </tr>
             `;
           })
@@ -233,9 +340,25 @@ function renderCompare() {
   `;
 }
 
+function getTargetPath(target) {
+  return target === 'a' ? elements.pathA.value.trim() : elements.pathB.value.trim();
+}
+
+function clearTarget(target) {
+  const video = target === 'a' ? elements.previewA : elements.previewB;
+  if (target === 'a') state.infoA = null;
+  if (target === 'b') state.infoB = null;
+  video.pause();
+  video.removeAttribute('src');
+  video.dataset.sourcePath = '';
+  video.load();
+  setPreviewAspect(target, null);
+  setPreviewSourceState(target, false);
+}
+
 async function browseFile(target) {
   if (!tauri?.dialog) {
-    setStatus('Tauri dialog API not available.');
+    setStatus('Tauri dialog API not available.', 'error');
     return;
   }
   const path = await tauri.dialog.open({
@@ -245,7 +368,7 @@ async function browseFile(target) {
   if (typeof path === 'string') {
     if (target === 'a') elements.pathA.value = path;
     if (target === 'b') elements.pathB.value = path;
-    loadPreviews();
+    loadPreviewForTarget(target);
   }
 }
 
@@ -302,40 +425,108 @@ function updateLinkedResize(changed) {
 
 function updateExportModeUI() {
   const isSideBySide = elements.exportMode.value === 'side-by-side';
-  const controls = [
-    elements.resizeWidth,
-    elements.resizeHeight,
-    elements.keepAspect,
-    elements.fps,
-    elements.trimStartFrame,
-    elements.trimEndFrame,
-  ];
+  const controls = [elements.resizeWidth, elements.resizeHeight, elements.keepAspect, elements.fps, elements.trimStartFrame, elements.trimEndFrame];
   for (const control of controls) {
     if (!control) continue;
     control.disabled = isSideBySide;
   }
-  if (elements.labelA) elements.labelA.disabled = !isSideBySide;
-  if (elements.labelB) elements.labelB.disabled = !isSideBySide;
+  elements.labelA.disabled = !isSideBySide;
+  elements.labelB.disabled = !isSideBySide;
   if (isSideBySide) {
     elements.resizeWidth.value = '';
     elements.resizeHeight.value = '';
     elements.fps.value = '';
     elements.trimStartFrame.value = '';
     elements.trimEndFrame.value = '';
+  } else {
+    const activeInfo = elements.exportMode.value === 'input-a' ? state.infoA : state.infoB;
+    const activeTarget = elements.exportMode.value === 'input-a' ? 'a' : 'b';
+    if (activeInfo) {
+      applyExportDefaultsFromInfo(activeInfo, activeTarget);
+    }
   }
 }
 
+function computeStageState() {
+  const loadReady = Boolean(state.infoA || state.infoB);
+  const compareReady = Boolean(state.infoA && state.infoB);
+
+  let exportReady = false;
+  const mode = elements.exportMode.value;
+  if (mode === 'input-a') exportReady = Boolean(state.infoA && elements.outputPath.value.trim());
+  if (mode === 'input-b') exportReady = Boolean(state.infoB && elements.outputPath.value.trim());
+  if (mode === 'side-by-side') exportReady = Boolean(state.infoA && state.infoB && elements.outputPath.value.trim());
+
+  elements.stageLoad.dataset.state = loadReady ? (state.infoA && state.infoB ? 'ready' : 'active') : 'idle';
+  elements.stageCompare.dataset.state = compareReady ? 'ready' : loadReady ? 'active' : 'idle';
+  elements.stageExport.dataset.state = exportReady ? 'ready' : compareReady || loadReady ? 'active' : 'idle';
+}
+
+function evenize(value) {
+  if (!value) return value;
+  return value % 2 === 0 ? value : value - 1;
+}
+
+function computeStackHeight() {
+  const heightA = state.infoA?.video?.height ?? null;
+  const heightB = state.infoB?.video?.height ?? null;
+  if (!heightA || !heightB) return null;
+  return evenize(Math.min(heightA, heightB));
+}
+
+function renderExportSummary() {
+  const mode = elements.exportMode.value;
+  const outputPath = elements.outputPath.value.trim();
+  const activeInfo = mode === 'input-a' ? state.infoA : mode === 'input-b' ? state.infoB : state.infoA && state.infoB ? { file: 'both' } : null;
+
+  if (!activeInfo) {
+    const missing = mode === 'side-by-side' ? 'Load both inputs before side-by-side export.' : `Load ${mode === 'input-a' ? 'Input A' : 'Input B'} to seed your export defaults.`;
+    setSummary(elements.exportSummary, missing, [{ label: formatMode(mode), tone: 'idle' }]);
+    return;
+  }
+
+  const chips = [
+    { label: formatMode(mode), tone: 'info' },
+    { label: elements.container.value.toUpperCase(), tone: 'ready' },
+    { label: elements.codec.value.toUpperCase(), tone: 'ready' },
+    { label: `CRF ${elements.crf.value}`, tone: 'ready' },
+  ];
+
+  if (mode === 'side-by-side') {
+    const stackHeight = computeStackHeight();
+    if (stackHeight) chips.push({ label: `Matched height ${stackHeight}px`, tone: 'info' });
+  } else if (outputPath) {
+    chips.push({ label: fileNameFromPath(outputPath), tone: 'info' });
+  }
+
+  const summaryText = outputPath
+    ? `Ready to render to ${fileNameFromPath(outputPath)}.`
+    : 'Choose an output path when you are ready to render.';
+
+  setSummary(elements.exportSummary, summaryText, chips);
+}
+
+function refreshUi() {
+  updateFileNames();
+  renderInputState('a');
+  renderInputState('b');
+  renderCompare();
+  renderExportSummary();
+  syncTransportControls();
+  computeStageState();
+}
+
 async function probe(target) {
-  const path = target === 'a' ? elements.pathA.value : elements.pathB.value;
+  const path = getTargetPath(target);
   if (!path) {
-    setStatus('Please select a video file first.');
+    setStatus('Please select a video file first.', 'warn');
     return;
   }
   if (!tauri?.core) {
-    setStatus('Tauri invoke API not available.');
+    setStatus('Tauri invoke API not available.', 'error');
     return;
   }
-  setStatus('');
+
   try {
     const info = await tauri.core.invoke('probe_video', { path });
     if (target === 'a') {
@@ -345,23 +536,52 @@ async function probe(target) {
     }
     setPreviewAspect(target, info);
     applyExportDefaultsFromInfo(info, target);
-    renderCompare();
+    refreshUi();
+    setStatus(`${fileNameFromPath(path)} is ready.`, 'success');
   } catch (error) {
-    setStatus(String(error));
+    if (target === 'a') state.infoA = null;
+    if (target === 'b') state.infoB = null;
+    setPreviewAspect(target, null);
+    refreshUi();
+    setStatus(String(error), 'error');
   }
+}
+
+function loadPreviewForTarget(target) {
+  const path = getTargetPath(target);
+  const video = target === 'a' ? elements.previewA : elements.previewB;
+
+  if (!path) {
+    clearTarget(target);
+    refreshUi();
+    return;
+  }
+
+  if (target === 'a') state.infoA = null;
+  if (target === 'b') state.infoB = null;
+  video.src = toVideoSrc(path);
+  video.dataset.sourcePath = path;
+  setPreviewSourceState(target, true);
+  refreshUi();
+  video.load();
+  probe(target);
 }
 
 function updateOutputPathExtension() {
   const ext = elements.container.value;
   const current = elements.outputPath.value.trim();
-  if (!current) return;
+  if (!current) {
+    renderExportSummary();
+    return;
+  }
   const withoutExt = current.replace(/\.[^/.]+$/, '');
   elements.outputPath.value = `${withoutExt}.${ext}`;
+  renderExportSummary();
 }
 
 async function browseOutput() {
   if (!tauri?.dialog) {
-    setStatus('Tauri dialog API not available.');
+    setStatus('Tauri dialog API not available.', 'error');
     return;
   }
   const path = await tauri.dialog.save({
@@ -369,6 +589,8 @@ async function browseOutput() {
   });
   if (typeof path === 'string') {
     elements.outputPath.value = path;
+    renderExportSummary();
+    computeStageState();
   }
 }
 
@@ -390,21 +612,16 @@ function validateExport(inputPathA, inputPathB, outputPath, mode) {
   return null;
 }
 
-function evenize(value) {
-  if (!value) return value;
-  return value % 2 === 0 ? value : value - 1;
-}
-
-function computeStackHeight() {
-  const heightA = state.infoA?.video?.height ?? null;
-  const heightB = state.infoB?.video?.height ?? null;
-  if (!heightA || !heightB) return null;
-  return evenize(Math.min(heightA, heightB));
+function setExportBusy(isBusy) {
+  state.isExporting = isBusy;
+  elements.exportButton.disabled = isBusy;
+  elements.cancelButton.disabled = !isBusy;
+  setProgressState(isBusy ? 'active' : elements.progress.value >= 100 ? 'done' : 'idle');
 }
 
 async function startExport() {
   if (!tauri?.core) {
-    setStatus('Tauri invoke API not available.');
+    setStatus('Tauri invoke API not available.', 'error');
     return;
   }
 
@@ -414,20 +631,19 @@ async function startExport() {
   const outputPath = elements.outputPath.value.trim();
   const error = validateExport(inputPathA, inputPathB, outputPath, exportMode);
   if (error) {
-    setStatus(error);
+    setStatus(error, 'warn');
     return;
   }
 
   const isSideBySide = exportMode === 'side-by-side';
-
   const stackHeight = isSideBySide ? computeStackHeight() : null;
   if (isSideBySide) {
     if (!state.infoA || !state.infoB) {
-      setStatus('Load both inputs before exporting side-by-side.');
+      setStatus('Load both inputs before exporting side-by-side.', 'warn');
       return;
     }
     if (!stackHeight) {
-      setStatus('Unable to determine matching heights for side-by-side export.');
+      setStatus('Unable to determine matching heights for side-by-side export.', 'error');
       return;
     }
   }
@@ -451,25 +667,21 @@ async function startExport() {
     stackHeight,
   };
 
-  if (payload.resizeWidth && payload.resizeWidth % 2 !== 0) {
-    setStatus('Warning: width is odd; consider using an even number.', false);
-  }
-  if (payload.resizeHeight && payload.resizeHeight % 2 !== 0) {
-    setStatus('Warning: height is odd; consider using an even number.', false);
-  }
-
   try {
-    elements.cancelButton.disabled = false;
+    state.exportId = null;
+    state.exportOutput = null;
     elements.openOutputButton.disabled = true;
     elements.progress.value = 0;
-    elements.progressText.textContent = 'Starting export...';
+    elements.progressText.textContent = 'Starting';
+    setExportBusy(true);
+    setStatus('Handing the render job to ffmpeg.', 'info');
     const result = await tauri.core.invoke('export_video', { params: payload });
     state.exportId = result.export_id;
     state.exportOutput = result.output_path;
-    setStatus('Export started.', false);
+    setStatus('Export started. Progress updates will appear here.', 'info');
   } catch (err) {
-    elements.cancelButton.disabled = true;
-    setStatus(String(err));
+    setExportBusy(false);
+    setStatus(String(err), 'error');
   }
 }
 
@@ -477,11 +689,13 @@ async function cancelExport() {
   if (!state.exportId || !tauri?.core) return;
   try {
     await tauri.core.invoke('cancel_export', { export_id: state.exportId });
-    setStatus('Export cancelled.', false);
+    setStatus('Export cancelled.', 'warn');
+    elements.progressText.textContent = 'Cancelled';
+    setProgressState('idle');
   } catch (err) {
-    setStatus(String(err));
+    setStatus(String(err), 'error');
   } finally {
-    elements.cancelButton.disabled = true;
+    setExportBusy(false);
   }
 }
 
@@ -496,39 +710,13 @@ async function openOutputFolder() {
       await tauri.core.invoke('plugin:opener|reveal_item_in_dir', { paths: [state.exportOutput] });
       return;
     }
-    setStatus('Open folder is unavailable in this build.');
+    setStatus('Open folder is unavailable in this build.', 'warn');
   } catch (err) {
-    setStatus(`Failed to open output folder: ${String(err)}`);
+    setStatus(`Failed to open output folder: ${String(err)}`, 'error');
   }
 }
 
-function setupListeners() {
-  document.querySelectorAll('[data-action="browse"]').forEach((button) => {
-    button.addEventListener('click', () => browseFile(button.dataset.target));
-  });
-
-  document.querySelector('[data-action="play-both"]').addEventListener('click', playBoth);
-  document.querySelector('[data-action="pause-both"]').addEventListener('click', pauseBoth);
-  document.querySelector('[data-action="reset-both"]').addEventListener('click', resetBoth);
-  document.querySelector('[data-action="output-browse"]').addEventListener('click', browseOutput);
-  document.querySelector('[data-action="export"]').addEventListener('click', startExport);
-  elements.cancelButton.addEventListener('click', cancelExport);
-  elements.openOutputButton.addEventListener('click', openOutputFolder);
-
-  elements.container.addEventListener('change', updateOutputPathExtension);
-  elements.exportMode.addEventListener('change', () => {
-    updateExportModeUI();
-    if (elements.exportMode.value === 'input-a' && state.infoA) {
-      applyExportDefaultsFromInfo(state.infoA, 'a');
-    }
-    if (elements.exportMode.value === 'input-b' && state.infoB) {
-      applyExportDefaultsFromInfo(state.infoB, 'b');
-    }
-  });
-
-  elements.resizeWidth.addEventListener('input', () => updateLinkedResize('width'));
-  elements.resizeHeight.addEventListener('input', () => updateLinkedResize('height'));
-
+function setupInputListeners() {
   ['input-a', 'input-b'].forEach((id) => {
     const panel = document.getElementById(id);
     panel.addEventListener('dragover', (event) => {
@@ -543,26 +731,67 @@ function setupListeners() {
       if (file?.path) {
         if (id === 'input-a') elements.pathA.value = file.path;
         if (id === 'input-b') elements.pathB.value = file.path;
-        loadPreviews();
+        loadPreviewForTarget(id === 'input-a' ? 'a' : 'b');
       }
     });
   });
 
-  elements.pathA.addEventListener('change', () => {
-    updateFileNames();
-    loadPreviews();
+  elements.pathA.addEventListener('input', refreshUi);
+  elements.pathB.addEventListener('input', refreshUi);
+  elements.pathA.addEventListener('change', () => loadPreviewForTarget('a'));
+  elements.pathB.addEventListener('change', () => loadPreviewForTarget('b'));
+}
+
+function setupExportListeners() {
+  elements.container.addEventListener('change', updateOutputPathExtension);
+  elements.exportMode.addEventListener('change', () => {
+    updateExportModeUI();
+    refreshUi();
   });
-  elements.pathB.addEventListener('change', () => {
-    updateFileNames();
-    loadPreviews();
+
+  [elements.codec, elements.crf, elements.outputPath, elements.labelA, elements.labelB, elements.audioCopy].forEach((element) => {
+    element.addEventListener('input', () => {
+      renderExportSummary();
+      computeStageState();
+    });
+    element.addEventListener('change', () => {
+      renderExportSummary();
+      computeStageState();
+    });
   });
+
+  elements.resizeWidth.addEventListener('input', () => {
+    updateLinkedResize('width');
+    renderExportSummary();
+  });
+  elements.resizeHeight.addEventListener('input', () => {
+    updateLinkedResize('height');
+    renderExportSummary();
+  });
+}
+
+function setupListeners() {
+  document.querySelectorAll('[data-action="browse"]').forEach((button) => {
+    button.addEventListener('click', () => browseFile(button.dataset.target));
+  });
+
+  elements.playButton.addEventListener('click', playBoth);
+  elements.pauseButton.addEventListener('click', pauseBoth);
+  elements.resetButton.addEventListener('click', resetBoth);
+  document.querySelector('[data-action="output-browse"]').addEventListener('click', browseOutput);
+  elements.exportButton.addEventListener('click', startExport);
+  elements.cancelButton.addEventListener('click', cancelExport);
+  elements.openOutputButton.addEventListener('click', openOutputFolder);
+
+  setupInputListeners();
+  setupExportListeners();
 
   [elements.previewA, elements.previewB].forEach((video) => {
     if (!video) return;
     video.addEventListener('error', () => {
       const src = video.dataset.sourcePath || video.currentSrc || video.src || 'unknown';
       const detail = video.error ? ` (code ${video.error.code})` : '';
-      setStatus(`Preview failed to load: ${src}${detail}`);
+      setStatus(`Preview failed to load: ${src}${detail}`, 'error');
     });
   });
 
@@ -570,34 +799,42 @@ function setupListeners() {
     tauri.event.listen('export-progress', (event) => {
       const { export_id, progress, out_time_ms, message } = event.payload;
       if (export_id !== state.exportId) return;
+
       if (progress === 'error') {
         elements.progressText.textContent = 'Failed';
-        elements.cancelButton.disabled = true;
+        setExportBusy(false);
         const detail = message ? `: ${message}` : '.';
-        setStatus(`Export failed${detail}`);
+        setStatus(`Export failed${detail}`, 'error');
         return;
       }
+
       if (out_time_ms) {
         const seconds = out_time_ms / 1000000;
         elements.progressText.textContent = `Processed ${seconds.toFixed(1)}s`;
       }
+
       if (progress === 'end') {
         elements.progress.value = 100;
         elements.progressText.textContent = 'Done';
-        elements.cancelButton.disabled = true;
+        setExportBusy(false);
         elements.openOutputButton.disabled = false;
-        setStatus('Export complete.', false);
-      } else {
-        const nextValue = Math.min(95, elements.progress.value + 1);
-        elements.progress.value = nextValue;
+        setProgressState('done');
+        setStatus('Export complete.', 'success');
+        return;
       }
+
+      const nextValue = Math.min(95, elements.progress.value + 1);
+      elements.progress.value = nextValue;
+      setProgressState('active');
     });
   }
 }
 
 function init() {
-  renderCompare();
+  setProgressState('idle');
+  setStatus('Pick or drop videos to start.', 'info');
   updateExportModeUI();
+  refreshUi();
   setupListeners();
 }
 
