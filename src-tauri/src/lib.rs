@@ -91,7 +91,9 @@ struct ExportParams {
     label_a: Option<String>,
     label_b: Option<String>,
     audio_copy: bool,
+    stack_direction: Option<String>,
     stack_height: Option<u32>,
+    stack_width: Option<u32>,
 }
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -456,13 +458,21 @@ fn export_video(
     if export_mode == "side-by-side" {
         let mut left_filters: Vec<String> = Vec::new();
         let mut right_filters: Vec<String> = Vec::new();
+        let stack_direction = params.stack_direction.as_deref().unwrap_or("horizontal");
+        let use_vertical_stack = stack_direction == "vertical";
 
         if !filters.is_empty() {
             left_filters.extend(filters.clone());
             right_filters.extend(filters.clone());
         }
 
-        if let Some(height) = params.stack_height {
+        if use_vertical_stack {
+            if let Some(width) = params.stack_width {
+                // Use -2 to force even height for encoders like libx264.
+                left_filters.push(format!("scale={width}:-2:flags=lanczos"));
+                right_filters.push(format!("scale={width}:-2:flags=lanczos"));
+            }
+        } else if let Some(height) = params.stack_height {
             // Use -2 to force even width for encoders like libx264.
             left_filters.push(format!("scale=-2:{height}:flags=lanczos"));
             right_filters.push(format!("scale=-2:{height}:flags=lanczos"));
@@ -486,7 +496,11 @@ fn export_video(
         } else {
             complex_filter.push_str("[1:v]null[right];");
         }
-        complex_filter.push_str("[left][right]hstack=inputs=2[vout]");
+        if use_vertical_stack {
+            complex_filter.push_str("[left][right]vstack=inputs=2[vout]");
+        } else {
+            complex_filter.push_str("[left][right]hstack=inputs=2[vout]");
+        }
         args.push("-filter_complex".to_string());
         args.push(complex_filter);
         args.push("-map".to_string());

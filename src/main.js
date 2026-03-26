@@ -33,6 +33,7 @@ const elements = {
   filenameB: document.querySelector('[data-field="filename-b"]'),
   outputPath: document.querySelector('[data-field="output-path"]'),
   exportMode: document.querySelector('[data-field="export-mode"]'),
+  stackDirection: document.querySelector('[data-field="stack-direction"]'),
   exportSummary: document.querySelector('[data-field="export-summary"]'),
   container: document.querySelector('[data-field="container"]'),
   codec: document.querySelector('[data-field="codec"]'),
@@ -189,6 +190,10 @@ function formatMode(mode) {
   if (mode === 'input-a') return 'Input A only';
   if (mode === 'input-b') return 'Input B only';
   return 'Side by side';
+}
+
+function formatStackDirection(direction) {
+  return direction === 'vertical' ? 'Vertical stack' : 'Horizontal stack';
 }
 
 function renderChips(container, chips) {
@@ -430,6 +435,9 @@ function updateExportModeUI() {
     if (!control) continue;
     control.disabled = isSideBySide;
   }
+  if (elements.stackDirection) {
+    elements.stackDirection.disabled = !isSideBySide;
+  }
   elements.labelA.disabled = !isSideBySide;
   elements.labelB.disabled = !isSideBySide;
   if (isSideBySide) {
@@ -474,6 +482,13 @@ function computeStackHeight() {
   return evenize(Math.min(heightA, heightB));
 }
 
+function computeStackWidth() {
+  const widthA = state.infoA?.video?.width ?? null;
+  const widthB = state.infoB?.video?.width ?? null;
+  if (!widthA || !widthB) return null;
+  return evenize(Math.min(widthA, widthB));
+}
+
 function renderExportSummary() {
   const mode = elements.exportMode.value;
   const outputPath = elements.outputPath.value.trim();
@@ -493,8 +508,13 @@ function renderExportSummary() {
   ];
 
   if (mode === 'side-by-side') {
-    const stackHeight = computeStackHeight();
-    if (stackHeight) chips.push({ label: `Matched height ${stackHeight}px`, tone: 'info' });
+    const stackDirection = elements.stackDirection.value;
+    chips.push({ label: formatStackDirection(stackDirection), tone: 'info' });
+    const stackSize = stackDirection === 'vertical' ? computeStackWidth() : computeStackHeight();
+    if (stackSize) {
+      const axisLabel = stackDirection === 'vertical' ? 'width' : 'height';
+      chips.push({ label: `Matched ${axisLabel} ${stackSize}px`, tone: 'info' });
+    }
   } else if (outputPath) {
     chips.push({ label: fileNameFromPath(outputPath), tone: 'info' });
   }
@@ -636,14 +656,20 @@ async function startExport() {
   }
 
   const isSideBySide = exportMode === 'side-by-side';
-  const stackHeight = isSideBySide ? computeStackHeight() : null;
+  const stackDirection = elements.stackDirection.value;
+  const stackHeight = isSideBySide && stackDirection !== 'vertical' ? computeStackHeight() : null;
+  const stackWidth = isSideBySide && stackDirection === 'vertical' ? computeStackWidth() : null;
   if (isSideBySide) {
     if (!state.infoA || !state.infoB) {
       setStatus('Load both inputs before exporting side-by-side.', 'warn');
       return;
     }
-    if (!stackHeight) {
-      setStatus('Unable to determine matching heights for side-by-side export.', 'error');
+    if (stackDirection === 'vertical' && !stackWidth) {
+      setStatus('Unable to determine matching widths for vertical side-by-side export.', 'error');
+      return;
+    }
+    if (stackDirection !== 'vertical' && !stackHeight) {
+      setStatus('Unable to determine matching heights for horizontal side-by-side export.', 'error');
       return;
     }
   }
@@ -664,7 +690,9 @@ async function startExport() {
     labelA: isSideBySide ? elements.labelA.value.trim() : '',
     labelB: isSideBySide ? elements.labelB.value.trim() : '',
     audioCopy: elements.audioCopy.checked,
+    stackDirection: isSideBySide ? stackDirection : null,
     stackHeight,
+    stackWidth,
   };
 
   try {
@@ -749,12 +777,14 @@ function setupExportListeners() {
     refreshUi();
   });
 
-  [elements.codec, elements.crf, elements.outputPath, elements.labelA, elements.labelB, elements.audioCopy].forEach((element) => {
-    element.addEventListener('input', () => {
-      renderExportSummary();
-      computeStageState();
-    });
-    element.addEventListener('change', () => {
+  [elements.codec, elements.crf, elements.outputPath, elements.labelA, elements.labelB, elements.audioCopy, elements.stackDirection]
+    .filter(Boolean)
+    .forEach((element) => {
+      element.addEventListener('input', () => {
+        renderExportSummary();
+        computeStageState();
+      });
+      element.addEventListener('change', () => {
       renderExportSummary();
       computeStageState();
     });
