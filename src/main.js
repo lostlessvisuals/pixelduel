@@ -59,6 +59,13 @@ const elements = {
   openOutputButton: document.querySelector('[data-action="open-output"]'),
 };
 
+const playbackSync = {
+  isApplying: false,
+  rafId: 0,
+  driftThresholdSec: 0.04,
+  hardSeekThresholdSec: 0.2,
+};
+
 function setStatus(message, tone = 'error') {
   elements.status.textContent = message || '';
   elements.status.dataset.tone = tone;
@@ -114,6 +121,79 @@ function mediaElements() {
   return [elements.previewA, elements.previewB].filter((video) => video?.src);
 }
 
+function withPlaybackSyncGuard(callback) {
+  playbackSync.isApplying = true;
+  try {
+    return callback();
+  } finally {
+    playbackSync.isApplying = false;
+  }
+}
+
+function isVideoPlaying(video) {
+  return Boolean(video && !video.paused && !video.ended && video.readyState >= 2);
+}
+
+function syncVideoTimes(referenceVideo = null, force = false) {
+  const videos = mediaElements();
+  if (videos.length < 2) return;
+
+  const anchor =
+    referenceVideo && videos.includes(referenceVideo)
+      ? referenceVideo
+      : videos.reduce((slowest, video) => {
+          if (!slowest) return video;
+          return (video.currentTime || 0) <= (slowest.currentTime || 0) ? video : slowest;
+        }, null);
+  if (!anchor) return;
+
+  const anchorTime = anchor.currentTime || 0;
+  for (const video of videos) {
+    if (video === anchor) continue;
+    const drift = Math.abs((video.currentTime || 0) - anchorTime);
+    if (force || drift >= playbackSync.hardSeekThresholdSec || (isVideoPlaying(video) && drift >= playbackSync.driftThresholdSec)) {
+      video.currentTime = anchorTime;
+    }
+    if (video.playbackRate !== anchor.playbackRate) {
+      video.playbackRate = anchor.playbackRate;
+    }
+  }
+}
+
+function stopPlaybackSyncLoop() {
+  if (!playbackSync.rafId) return;
+  cancelAnimationFrame(playbackSync.rafId);
+  playbackSync.rafId = 0;
+}
+
+function runPlaybackSyncLoop() {
+  playbackSync.rafId = 0;
+  if (playbackSync.isApplying) {
+    playbackSync.rafId = requestAnimationFrame(runPlaybackSyncLoop);
+    return;
+  }
+
+  const videos = mediaElements();
+  const playingVideos = videos.filter((video) => isVideoPlaying(video));
+  if (playingVideos.length === 0) {
+    return;
+  }
+
+  withPlaybackSyncGuard(() => syncVideoTimes(playingVideos[0]));
+  playbackSync.rafId = requestAnimationFrame(runPlaybackSyncLoop);
+}
+
+function refreshPlaybackSyncLoop() {
+  const hasPlaying = mediaElements().some((video) => isVideoPlaying(video));
+  if (!hasPlaying) {
+    stopPlaybackSyncLoop();
+    return;
+  }
+  if (!playbackSync.rafId) {
+    playbackSync.rafId = requestAnimationFrame(runPlaybackSyncLoop);
+  }
+}
+
 function syncTransportControls() {
   const hasMedia = mediaElements().length > 0;
   elements.playButton.disabled = !hasMedia;
@@ -128,23 +208,33 @@ async function playBoth() {
     return;
   }
   const targetTime = Math.min(...videos.map((video) => video.currentTime || 0));
-  for (const video of videos) {
-    video.currentTime = targetTime;
-  }
+  withPlaybackSyncGuard(() => {
+    for (const video of videos) {
+      video.currentTime = targetTime;
+      video.playbackRate = 1;
+    }
+  });
   await Promise.all(videos.map((video) => video.play().catch(() => null)));
+  refreshPlaybackSyncLoop();
 }
 
 function pauseBoth() {
-  for (const video of mediaElements()) {
-    video.pause();
-  }
+  withPlaybackSyncGuard(() => {
+    for (const video of mediaElements()) {
+      video.pause();
+    }
+  });
+  refreshPlaybackSyncLoop();
 }
 
 function resetBoth() {
-  for (const video of mediaElements()) {
-    video.pause();
-    video.currentTime = 0;
-  }
+  withPlaybackSyncGuard(() => {
+    for (const video of mediaElements()) {
+      video.pause();
+      video.currentTime = 0;
+    }
+  });
+  refreshPlaybackSyncLoop();
 }
 
 function formatMaybe(value, fallback = '-') {
@@ -359,6 +449,7 @@ function clearTarget(target) {
   video.load();
   setPreviewAspect(target, null);
   setPreviewSourceState(target, false);
+  refreshPlaybackSyncLoop();
 }
 
 async function browseFile(target) {
@@ -818,6 +909,60 @@ function setupListeners() {
 
   [elements.previewA, elements.previewB].forEach((video) => {
     if (!video) return;
+    video.addEventListener('play', () => {
+      if (playbackSync.isApplying) {
+        refreshPlaybackSyncLoop();
+        return;
+      }
+      const peers = mediaElements().filter((peer) => peer !== video);
+      withPlaybackSyncGuard(() => {
+        syncVideoTimes(video, true);
+      });
+      Promise.all(peers.map((peer) => peer.play().catch(() => null))).finally(() => {
+        refreshPlaybackSyncLoop();
+      });
+    });
+    video.addEventListener('pause', () => {
+      if (playbackSync.isApplying) {
+        refreshPlaybackSyncLoop();
+        return;
+      }
+      withPlaybackSyncGuard(() => {
+        mediaElements()
+          .filter((peer) => peer !== video)
+          .forEach((peer) => peer.pause());
+      });
+      refreshPlaybackSyncLoop();
+    });
+    video.addEventListener('seeking', () => {
+      if (playbackSync.isApplying) return;
+      withPlaybackSyncGuard(() => {
+        syncVideoTimes(video, true);
+      });
+    });
+    video.addEventListener('ratechange', () => {
+      if (playbackSync.isApplying) return;
+      const rate = Number(video.playbackRate) || 1;
+      withPlaybackSyncGuard(() => {
+        mediaElements()
+          .filter((peer) => peer !== video)
+          .forEach((peer) => {
+            peer.playbackRate = rate;
+          });
+      });
+    });
+    video.addEventListener('ended', () => {
+      if (playbackSync.isApplying) {
+        refreshPlaybackSyncLoop();
+        return;
+      }
+      withPlaybackSyncGuard(() => {
+        mediaElements()
+          .filter((peer) => peer !== video)
+          .forEach((peer) => peer.pause());
+      });
+      refreshPlaybackSyncLoop();
+    });
     video.addEventListener('error', () => {
       const src = video.dataset.sourcePath || video.currentSrc || video.src || 'unknown';
       const detail = video.error ? ` (code ${video.error.code})` : '';
